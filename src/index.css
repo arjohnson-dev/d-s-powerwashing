@@ -1,0 +1,67 @@
+@import url("https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Quattrocento:wght@400;700&display=swap");
+@import url("./styles.css");
+
+:root {
+  color-scheme: dark;
+  --color-bg: #000000;
+  --color-bg-elevated: rgba(0, 0, 0, 0.92);
+  --color-surface: #080b0d;
+  --color-text: #f8fbff;
+  --color-text-muted: #c8d8e5;
+  --color-primary: #3693cf;
+  --color-primary-deep: #1e6f9f;
+  --color-accent: var(--color-primary);
+  --color-accent-deep: var(--color-primary-deep);
+  --color-border: rgba(54, 147, 207, 0.28);
+  --font-body: "Quattrocento", Georgia, serif;
+  --font-title: "Oswald", "Arial Narrow", sans-serif;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background:
+    radial-gradient(circle at top, rgba(54, 147, 207, 0.2), transparent 35%),
+    linear-gradient(180deg, #071017 0%, var(--color-bg) 55%, #000000 100%);
+  color: var(--color-text);
+  font-family: var(--font-body);
+}
+
+body {
+  min-height: 100vh;
+  line-height: 1.5;
+}
+
+a,
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0;
+  font-family: var(--font-title);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
