@@ -1,5 +1,5 @@
 import deckImage from "../assets/deck.jpg";
-import BeholdFeed from "../components/BeholdFeed";
+import GalleryFeed from "../components/GalleryFeed";
 import PageHero from "../components/PageHero";
 import Seo from "../components/Seo";
 
@@ -19,10 +19,7 @@ function PastProjectsPage() {
         size="compact"
       />
 
-      <BeholdFeed
-        feedId="6LsCeiBj4jMiPUUyg9yE"
-        ctaLabel="Book A Cleaning"
-      />
+      <GalleryFeed ctaLabel="Book A Cleaning" />
     </>
   );
 }
