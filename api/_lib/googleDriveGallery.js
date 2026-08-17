@@ -4,8 +4,7 @@ import sharp from "sharp";
 const DRIVE_FILES_ENDPOINT = "https://www.googleapis.com/drive/v3/files";
 const DRIVE_FILE_MEDIA_ENDPOINT = (fileId) =>
   `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`;
-const GALLERY_THUMBNAIL_MAX_DIMENSION = 1400;
-const GALLERY_THUMBNAIL_JPEG_QUALITY = 82;
+const HEIC_CONVERSION_JPEG_QUALITY = 92;
 
 const REQUIRED_ENV_VARS = [
   "GOOGLE_DRIVE_FOLDER_ID",
@@ -18,6 +17,13 @@ const SUPPORTED_IMAGE_MIME_TYPES = new Set([
   "image/png",
   "image/webp",
   "image/gif",
+]);
+
+const HEIC_IMAGE_MIME_TYPES = new Set([
+  "image/heic",
+  "image/heif",
+  "image/heic-sequence",
+  "image/heif-sequence",
 ]);
 
 const FILE_ID_PATTERN = /^[A-Za-z0-9_-]{10,}$/;
@@ -95,25 +101,39 @@ async function getAuthHeaders(authClient) {
 }
 
 function driveQueryForFolder(folderId) {
-  const mimeQuery = Array.from(SUPPORTED_IMAGE_MIME_TYPES)
+  const mimeQuery = Array.from(getServableImageMimeTypes())
     .map((mimeType) => `mimeType = '${mimeType}'`)
     .join(" or ");
 
   return `'${folderId.replace(/'/g, "\\'")}' in parents and trashed = false and (${mimeQuery})`;
 }
 
+function canConvertHeicImages() {
+  const supportedSuffixes = sharp.format.heif?.input?.fileSuffix ?? [];
+  return supportedSuffixes.some((suffix) => suffix === ".heic" || suffix === ".heif");
+}
+
+function getServableImageMimeTypes() {
+  if (!canConvertHeicImages()) {
+    return SUPPORTED_IMAGE_MIME_TYPES;
+  }
+
+  return new Set([...SUPPORTED_IMAGE_MIME_TYPES, ...HEIC_IMAGE_MIME_TYPES]);
+}
+
+function isHeicImage(file) {
+  return HEIC_IMAGE_MIME_TYPES.has(file?.mimeType);
+}
+
 function normalizeDriveFile(file) {
   const width = Number(file.imageMediaMetadata?.width);
   const height = Number(file.imageMediaMetadata?.height);
   const imageUrl = `/api/gallery/image?id=${encodeURIComponent(file.id)}`;
-  const thumbnailVersion = file.modifiedTime ? `&v=${encodeURIComponent(file.modifiedTime)}` : "";
-  const thumbnailUrl = `/api/gallery/thumbnail?id=${encodeURIComponent(file.id)}${thumbnailVersion}`;
 
   return {
     id: file.id,
     filename: file.name,
     imageUrl,
-    thumbnailUrl,
     width: Number.isFinite(width) ? width : undefined,
     height: Number.isFinite(height) ? height : undefined,
     createdAt: file.createdTime,
@@ -144,8 +164,10 @@ async function listDriveImageFiles(authClient, folderId) {
   }
 
   const data = await response.json();
+  const servableImageMimeTypes = getServableImageMimeTypes();
+
   return (data.files ?? []).filter(
-    (file) => file.id && file.name && SUPPORTED_IMAGE_MIME_TYPES.has(file.mimeType),
+    (file) => file.id && file.name && servableImageMimeTypes.has(file.mimeType),
   );
 }
 
@@ -157,7 +179,6 @@ function mockGalleryImages() {
       id: "mock-drive-image-1",
       filename: "mock-gallery-image.jpg",
       imageUrl: "/api/gallery/image?id=mock-drive-image-1",
-      thumbnailUrl: "/api/gallery/thumbnail?id=mock-drive-image-1",
       width: 1200,
       height: 800,
       createdAt: now,
@@ -242,94 +263,38 @@ export async function getDriveImageResponse(fileId) {
 
   const body = Buffer.from(await response.arrayBuffer());
 
+  if (isHeicImage(requestedImage)) {
+    let convertedBody;
+
+    try {
+      convertedBody = await sharp(body, { animated: false })
+        .rotate()
+        .jpeg({
+          quality: HEIC_CONVERSION_JPEG_QUALITY,
+          mozjpeg: true,
+        })
+        .toBuffer();
+    } catch (error) {
+      throw new SafeGalleryError("Unable to convert gallery HEIC image.", 500, {
+        reason: "heic-conversion-failed",
+        fileId,
+        message: error?.message,
+      });
+    }
+
+    return {
+      body: convertedBody,
+      contentType: "image/jpeg",
+      contentLength: convertedBody.length,
+      source: "google-drive-heic-converted",
+    };
+  }
+
   return {
     body,
     contentType: response.headers.get("content-type") ?? "application/octet-stream",
     contentLength: body.length,
     source: "google-drive",
-  };
-}
-
-export async function getDriveThumbnailResponse(fileId) {
-  if (!fileId || !FILE_ID_PATTERN.test(fileId)) {
-    throw new SafeGalleryError("Missing or invalid image id.", 400, {
-      reason: "invalid-file-id",
-    });
-  }
-
-  if (fileId.startsWith("mock-drive-image-") && canUseMockGallery()) {
-    return {
-      body: Buffer.from(
-        "R0lGODlhAQABAPAAAP///wAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==",
-        "base64",
-      ),
-      contentType: "image/gif",
-      contentLength: 43,
-      source: "mock",
-    };
-  }
-
-  const credentials = getGoogleCredentials();
-
-  if (!credentials) {
-    throw new SafeGalleryError("Gallery service is not configured.", 500, {
-      reason: "missing-env",
-    });
-  }
-
-  const authClient = createAuthClient(credentials);
-  const requestedImage = await getGalleryFileById(authClient, credentials.folderId, fileId);
-
-  if (!requestedImage) {
-    throw new SafeGalleryError("Image was not found in the configured gallery folder.", 404, {
-      reason: "file-not-in-gallery-folder",
-      fileId,
-    });
-  }
-
-  const response = await fetch(DRIVE_FILE_MEDIA_ENDPOINT(fileId), {
-    headers: await getAuthHeaders(authClient),
-  });
-
-  if (!response.ok) {
-    throw new SafeGalleryError("Unable to load gallery image for thumbnail.", response.status, {
-      reason: "drive-thumbnail-source-failed",
-      fileId,
-      status: response.status,
-      statusText: response.statusText,
-    });
-  }
-
-  const sourceBody = Buffer.from(await response.arrayBuffer());
-  let body;
-
-  try {
-    body = await sharp(sourceBody, { animated: false })
-      .rotate()
-      .resize({
-        width: GALLERY_THUMBNAIL_MAX_DIMENSION,
-        height: GALLERY_THUMBNAIL_MAX_DIMENSION,
-        fit: "inside",
-        withoutEnlargement: true,
-      })
-      .jpeg({
-        quality: GALLERY_THUMBNAIL_JPEG_QUALITY,
-        mozjpeg: true,
-      })
-      .toBuffer();
-  } catch (error) {
-    throw new SafeGalleryError("Unable to optimize gallery thumbnail.", 500, {
-      reason: "thumbnail-optimization-failed",
-      fileId,
-      message: error?.message,
-    });
-  }
-
-  return {
-    body,
-    contentType: "image/jpeg",
-    contentLength: body.length,
-    source: "google-drive-optimized-thumbnail",
   };
 }
 

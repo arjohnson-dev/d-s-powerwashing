@@ -20,8 +20,7 @@ sequences (`\n`). The API normalizes those before authenticating.
 
 Local development can run without credentials. When the required variables are
 missing outside production, `/api/gallery` returns a small mock response and
-`/api/gallery/image?id=mock-drive-image-1` and
-`/api/gallery/thumbnail?id=mock-drive-image-1` return placeholder images. Set
+`/api/gallery/image?id=mock-drive-image-1` returns a placeholder image. Set
 `GOOGLE_DRIVE_GALLERY_USE_MOCK=false` to disable this behavior locally.
 
 In Vite development, the React gallery replaces mock API responses with local
@@ -58,7 +57,6 @@ the folder ID is `abc123FolderId`.
       "id": "drive-file-id",
       "filename": "project.jpg",
       "imageUrl": "/api/gallery/image?id=drive-file-id",
-      "thumbnailUrl": "/api/gallery/thumbnail?id=drive-file-id",
       "width": 1200,
       "height": 800,
       "createdAt": "2026-08-17T12:00:00.000Z",
@@ -77,12 +75,13 @@ Drive client. The endpoint validates the file ID and only serves files returned
 from the configured gallery folder, so it cannot be used as a generic Drive
 proxy.
 
-`GET /api/gallery/thumbnail?id=FILE_ID` streams an optimized medium-resolution
-JPEG for the same validated folder image. The endpoint fetches the original
-Drive media, preserves aspect ratio, and resizes it to fit within a 1400px box
-without enlarging smaller images. The React gallery grid uses this URL so
-visitors do not need to download full-resolution originals just to view the
-thumbnail grid.
+The React gallery grid and lightbox both use `imageUrl`, so browser-compatible
+Drive originals are served without resizing or quality reduction.
+
+HEIC/HEIF browser support is limited, so the API only includes those files when
+the deployed image runtime can decode `.heic` or `.heif` input. When supported,
+`GET /api/gallery/image?id=FILE_ID` converts HEIC/HEIF files to high-quality
+JPEG without resizing. JPEG, PNG, WebP, and GIF originals are streamed as-is.
 
 ## Caching
 
@@ -100,13 +99,4 @@ for 24 hours:
 
 ```text
 Cache-Control: public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800
-```
-
-Optimized gallery images include the Drive file's `modifiedTime` in the
-thumbnail URL, so unchanged files keep a stable cache key while edited files get
-a fresh optimized URL. They can be cached by browsers for 24 hours and by
-Vercel/CDN for 7 days:
-
-```text
-Cache-Control: public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000
 ```

@@ -16,31 +16,26 @@ const LOCAL_TEST_IMAGES = import.meta.env.DEV
         id: "local-test-gallery-deck",
         filename: "deck.jpg",
         imageUrl: deckImage,
-        thumbnailUrl: deckImage,
       },
       {
         id: "local-test-gallery-house",
         filename: "house.jpg",
         imageUrl: houseImage,
-        thumbnailUrl: houseImage,
       },
       {
         id: "local-test-gallery-trailer",
         filename: "trailer.jpg",
         imageUrl: trailerImage,
-        thumbnailUrl: trailerImage,
       },
       {
         id: "local-test-gallery-about",
         filename: "about.jpg",
         imageUrl: aboutImage,
-        thumbnailUrl: aboutImage,
       },
       {
         id: "local-test-gallery-hero",
         filename: "hero.jpg",
         imageUrl: heroImage,
-        thumbnailUrl: heroImage,
       },
     ]
   : [];
@@ -215,6 +210,51 @@ function GalleryLightbox({ image, hasMultipleImages, onClose, onNext, onPrevious
   );
 }
 
+function GalleryCard({ image, index, onOpen }) {
+  const [loadStatus, setLoadStatus] = useState("loading");
+  const width = Number(image.width);
+  const height = Number(image.height);
+  const hasDimensions =
+    Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0;
+  const imageAlt = getImageAlt(image.filename);
+  const hasFailed = loadStatus === "error";
+
+  const handleOpen = () => {
+    if (!hasFailed) {
+      onOpen(index);
+    }
+  };
+
+  return (
+    <button
+      aria-label={`Open ${imageAlt}`}
+      className={`gallery-item${loadStatus === "loaded" ? " is-loaded" : ""}${
+        hasFailed ? " has-image-error" : ""
+      }`}
+      onClick={handleOpen}
+      style={{ aspectRatio: hasDimensions ? `${width} / ${height}` : "4 / 3" }}
+      type="button"
+    >
+      {loadStatus === "loading" ? (
+        <span aria-hidden="true" className="gallery-image-spinner" />
+      ) : null}
+      {hasFailed ? (
+        <span className="gallery-image-unavailable">Image unavailable</span>
+      ) : null}
+      <img
+        alt={imageAlt}
+        className="gallery-image"
+        height={hasDimensions ? height : undefined}
+        loading="lazy"
+        onError={() => setLoadStatus("error")}
+        onLoad={() => setLoadStatus("loaded")}
+        src={image.imageUrl}
+        width={hasDimensions ? width : undefined}
+      />
+    </button>
+  );
+}
+
 function GalleryFeed({ ctaLabel, ctaTo = "/contact" }) {
   const [images, setImages] = useState([]);
   const [status, setStatus] = useState("loading");
@@ -353,32 +393,14 @@ function GalleryFeed({ ctaLabel, ctaTo = "/contact" }) {
 
         {status === "ready" && images.length > 0 ? (
           <div className="gallery-grid">
-            {images.map((image, index) => {
-              const width = Number(image.width);
-              const height = Number(image.height);
-              const hasDimensions =
-                Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0;
-
-              return (
-                <button
-                  aria-label={`Open ${getImageAlt(image.filename)}`}
-                  className="gallery-item"
-                  key={image.id}
-                  onClick={() => openLightbox(index)}
-                  style={hasDimensions ? { aspectRatio: `${width} / ${height}` } : undefined}
-                  type="button"
-                >
-                  <img
-                    alt={getImageAlt(image.filename)}
-                    className="gallery-image"
-                    height={hasDimensions ? height : undefined}
-                    loading="lazy"
-                    src={image.thumbnailUrl || image.imageUrl}
-                    width={hasDimensions ? width : undefined}
-                  />
-                </button>
-              );
-            })}
+            {images.map((image, index) => (
+              <GalleryCard
+                image={image}
+                index={index}
+                key={`${image.id}:${image.imageUrl}`}
+                onOpen={openLightbox}
+              />
+            ))}
           </div>
         ) : null}
       </div>
