@@ -17,6 +17,8 @@ function ImageLinkPanel({
         className="image-link-panel-media"
         src={image}
         alt={imageAlt}
+        decoding="async"
+        loading="lazy"
         style={{ objectPosition: imagePosition, transform: `scale(${imageScale})` }}
       />
       <div className="image-link-panel-overlay" />

@@ -11,6 +11,8 @@ function PageHero({
   align = "left",
   size = "default",
   imagePosition = "center",
+  imageLoading = "eager",
+  imageFetchPriority = "high",
   className = "",
 }) {
   const contentClassName =
@@ -25,6 +27,9 @@ function PageHero({
         className="page-hero-media"
         src={image}
         alt={imageAlt}
+        decoding="async"
+        fetchPriority={imageFetchPriority}
+        loading={imageLoading}
         style={{ objectPosition: imagePosition }}
       />
       <div className="page-hero-overlay" />

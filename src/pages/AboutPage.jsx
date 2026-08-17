@@ -1,4 +1,4 @@
-import aboutHeroImage from "../assets/hero1.jpg";
+import { siteImages } from "../assets/siteImages";
 import AboutProfileSection from "../components/AboutProfileSection";
 import PageHero from "../components/PageHero";
 import Seo from "../components/Seo";
@@ -13,7 +13,7 @@ function AboutPage() {
       />
       <PageHero
         title="About Us"
-        image={aboutHeroImage}
+        image={siteImages.aboutHero}
         imageAlt="Dylan Pittenger with D's Powerwashing equipment"
         imagePosition="center 28%"
         body="Owner-operated exterior cleaning with dependable communication, careful surface care, and pride in every finished power washing job."

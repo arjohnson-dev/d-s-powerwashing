@@ -1,4 +1,4 @@
-import deckImage from "../assets/deck.jpg";
+import { siteImages } from "../assets/siteImages";
 import PageHero from "../components/PageHero";
 import Seo from "../components/Seo";
 
@@ -12,7 +12,7 @@ function NotFoundPage() {
       />
       <PageHero
         title="Page Not Found"
-        image={deckImage}
+        image={siteImages.deck}
         imageAlt="Powerwashing work area"
         eyebrow="Wrong Turn"
         body="The page you were looking for is not here, but we can get you back to D's Powerwashing."

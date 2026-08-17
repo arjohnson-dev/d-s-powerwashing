@@ -1,5 +1,5 @@
 import DayRateCardSection from "../components/DayRateCardSection";
-import houseImage from "../assets/house.jpg";
+import { siteImages } from "../assets/siteImages";
 import PageHero from "../components/PageHero";
 import Seo from "../components/Seo";
 import WorkflowSection from "../components/WorkflowSection";
@@ -14,7 +14,7 @@ function ServicesPage() {
       />
       <PageHero
         title="Power Washing Services"
-        image={houseImage}
+        image={siteImages.house}
         imageAlt="Freshly cleaned home exterior"
         body="Professional pressure washing and exterior cleaning for homes, concrete, siding, patios, decks, walkways, and other outdoor surfaces."
         size="compact"

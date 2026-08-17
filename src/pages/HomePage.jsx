@@ -1,8 +1,4 @@
-import heroImage from "../assets/hero.jpg";
-import deckImage from "../assets/deck.jpg";
-import houseImage from "../assets/house.jpg";
-import aboutHeroImage from "../assets/hero1.jpg";
-import trailerImage from "../assets/trailer.jpg";
+import { siteImages } from "../assets/siteImages";
 import ImageLinkPanel from "../components/ImageLinkPanel";
 import PageHero from "../components/PageHero";
 import Seo from "../components/Seo";
@@ -17,7 +13,7 @@ function HomePage() {
       />
       <PageHero
         title="We Can Clean It"
-        image={heroImage}
+        image={siteImages.hero}
         imageAlt="Powerwashing equipment ready for exterior cleaning"
         imagePosition="center 42%"
         className="home-hero"
@@ -28,19 +24,19 @@ function HomePage() {
 
       <ImageLinkPanel
         title="Services"
-        image={houseImage}
+        image={siteImages.house}
         imageAlt="Freshly cleaned home exterior"
         to="/services"
       />
       <ImageLinkPanel
         title="Past Projects"
-        image={deckImage}
+        image={siteImages.deck}
         imageAlt="Recently cleaned deck"
         to="/our-work"
       />
       <ImageLinkPanel
         title="About Us"
-        image={aboutHeroImage}
+        image={siteImages.aboutHero}
         imageAlt="Dylan Pittenger with D's Powerwashing equipment"
         imagePosition="center 34%"
         className="about-link-panel"
@@ -48,7 +44,7 @@ function HomePage() {
       />
       <ImageLinkPanel
         title="Contact"
-        image={trailerImage}
+        image={siteImages.trailer}
         imageAlt="D's Powerwashing trailer and equipment"
         to="/contact"
       />

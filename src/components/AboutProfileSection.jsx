@@ -1,4 +1,4 @@
-import aboutImage from "../assets/about.jpg";
+import { siteImages } from "../assets/siteImages";
 
 const valueItems = [
   {
@@ -39,8 +39,10 @@ function AboutProfileSection() {
             <div className="about-profile-image-wrap">
               <img
                 className="about-profile-image"
-                src={aboutImage}
+                src={siteImages.about}
                 alt="D's Powerwashing owner at an exterior cleaning job"
+                decoding="async"
+                loading="lazy"
               />
             </div>
 

@@ -1,4 +1,4 @@
-import trailerImage from "../assets/trailer.jpg";
+import { siteImages } from "../assets/siteImages";
 import ContactFormSection from "../components/ContactFormSection";
 import PageHero from "../components/PageHero";
 import Seo from "../components/Seo";
@@ -13,7 +13,7 @@ function ContactPage() {
       />
       <PageHero
         title="Contact"
-        image={trailerImage}
+        image={siteImages.trailer}
         imageAlt="D's Powerwashing trailer and equipment"
         body="Request a power washing estimate for your driveway, siding, patio, walkway, deck, or other outdoor surface."
         size="compact"
