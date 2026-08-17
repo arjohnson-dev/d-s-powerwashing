@@ -1,10 +1,53 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
+import aboutImage from "../assets/about.jpg";
+import deckImage from "../assets/deck.jpg";
+import heroImage from "../assets/hero.jpg";
+import houseImage from "../assets/house.jpg";
+import trailerImage from "../assets/trailer.jpg";
 import PrimaryButtonLink from "./PrimaryButtonLink";
 
 const GALLERY_ENDPOINT = "/api/gallery";
 const SWIPE_DISTANCE_THRESHOLD = 50;
 const SWIPE_AXIS_RATIO = 1.4;
+const LOCAL_TEST_IMAGES = import.meta.env.DEV
+  ? [
+      {
+        id: "local-test-gallery-deck",
+        filename: "deck.jpg",
+        imageUrl: deckImage,
+        thumbnailUrl: deckImage,
+      },
+      {
+        id: "local-test-gallery-house",
+        filename: "house.jpg",
+        imageUrl: houseImage,
+        thumbnailUrl: houseImage,
+      },
+      {
+        id: "local-test-gallery-trailer",
+        filename: "trailer.jpg",
+        imageUrl: trailerImage,
+        thumbnailUrl: trailerImage,
+      },
+      {
+        id: "local-test-gallery-about",
+        filename: "about.jpg",
+        imageUrl: aboutImage,
+        thumbnailUrl: aboutImage,
+      },
+      {
+        id: "local-test-gallery-hero",
+        filename: "hero.jpg",
+        imageUrl: heroImage,
+        thumbnailUrl: heroImage,
+      },
+    ]
+  : [];
+
+function canUseLocalTestImages() {
+  return import.meta.env.DEV && LOCAL_TEST_IMAGES.length > 0;
+}
 
 function getImageAlt(filename) {
   const fallback = "Completed power washing project";
@@ -199,12 +242,20 @@ function GalleryFeed({ ctaLabel, ctaTo = "/contact" }) {
         }
 
         const data = await response.json();
-        const nextImages = Array.isArray(data.images) ? data.images : [];
+        const apiImages = Array.isArray(data.images) ? data.images : [];
+        const nextImages =
+          canUseLocalTestImages() && data.meta?.source === "mock" ? LOCAL_TEST_IMAGES : apiImages;
 
         setImages(nextImages);
         setStatus("ready");
       } catch (error) {
         if (error.name === "AbortError") {
+          return;
+        }
+
+        if (canUseLocalTestImages()) {
+          setImages(LOCAL_TEST_IMAGES);
+          setStatus("ready");
           return;
         }
 

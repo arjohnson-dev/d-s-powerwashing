@@ -24,6 +24,11 @@ missing outside production, `/api/gallery` returns a small mock response and
 `/api/gallery/thumbnail?id=mock-drive-image-1` return placeholder images. Set
 `GOOGLE_DRIVE_GALLERY_USE_MOCK=false` to disable this behavior locally.
 
+In Vite development, the React gallery replaces mock API responses with local
+photos from `src/assets` so lightbox navigation can be tested with real project
+images. Those local test images are gated by `import.meta.env.DEV` and are not
+used as production gallery content.
+
 ## Google Drive Setup
 
 1. Create or choose a Google Cloud service account with Drive API access.
@@ -72,10 +77,12 @@ Drive client. The endpoint validates the file ID and only serves files returned
 from the configured gallery folder, so it cannot be used as a generic Drive
 proxy.
 
-`GET /api/gallery/thumbnail?id=FILE_ID` streams the smaller Google Drive
-thumbnail for the same validated folder image. The React gallery grid uses this
-URL so visitors do not need to download full-resolution originals just to view
-the thumbnail grid.
+`GET /api/gallery/thumbnail?id=FILE_ID` streams an optimized medium-resolution
+JPEG for the same validated folder image. The endpoint fetches the original
+Drive media, preserves aspect ratio, and resizes it to fit within a 1400px box
+without enlarging smaller images. The React gallery grid uses this URL so
+visitors do not need to download full-resolution originals just to view the
+thumbnail grid.
 
 ## Caching
 
@@ -88,9 +95,18 @@ CDN-Cache-Control: no-store
 Vercel-CDN-Cache-Control: no-store
 ```
 
-Image and thumbnail responses can be cached by browsers for 1 hour and by
-Vercel/CDN for 24 hours:
+Original image responses can be cached by browsers for 1 hour and by Vercel/CDN
+for 24 hours:
 
 ```text
 Cache-Control: public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800
+```
+
+Optimized gallery images include the Drive file's `modifiedTime` in the
+thumbnail URL, so unchanged files keep a stable cache key while edited files get
+a fresh optimized URL. They can be cached by browsers for 24 hours and by
+Vercel/CDN for 7 days:
+
+```text
+Cache-Control: public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000
 ```

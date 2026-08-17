@@ -1,8 +1,11 @@
 import { JWT } from "google-auth-library";
+import sharp from "sharp";
 
 const DRIVE_FILES_ENDPOINT = "https://www.googleapis.com/drive/v3/files";
 const DRIVE_FILE_MEDIA_ENDPOINT = (fileId) =>
   `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`;
+const GALLERY_THUMBNAIL_MAX_DIMENSION = 1400;
+const GALLERY_THUMBNAIL_JPEG_QUALITY = 82;
 
 const REQUIRED_ENV_VARS = [
   "GOOGLE_DRIVE_FOLDER_ID",
@@ -103,9 +106,8 @@ function normalizeDriveFile(file) {
   const width = Number(file.imageMediaMetadata?.width);
   const height = Number(file.imageMediaMetadata?.height);
   const imageUrl = `/api/gallery/image?id=${encodeURIComponent(file.id)}`;
-  const thumbnailUrl = file.thumbnailLink
-    ? `/api/gallery/thumbnail?id=${encodeURIComponent(file.id)}`
-    : imageUrl;
+  const thumbnailVersion = file.modifiedTime ? `&v=${encodeURIComponent(file.modifiedTime)}` : "";
+  const thumbnailUrl = `/api/gallery/thumbnail?id=${encodeURIComponent(file.id)}${thumbnailVersion}`;
 
   return {
     id: file.id,
@@ -122,8 +124,7 @@ function normalizeDriveFile(file) {
 async function listDriveImageFiles(authClient, folderId) {
   const params = new URLSearchParams({
     q: driveQueryForFolder(folderId),
-    fields:
-      "files(id,name,mimeType,createdTime,modifiedTime,imageMediaMetadata(width,height),thumbnailLink)",
+    fields: "files(id,name,mimeType,createdTime,modifiedTime,imageMediaMetadata(width,height))",
     orderBy: "createdTime desc",
     pageSize: "1000",
     supportsAllDrives: "true",
@@ -286,30 +287,49 @@ export async function getDriveThumbnailResponse(fileId) {
     });
   }
 
-  if (!requestedImage.thumbnailLink) {
-    return getDriveImageResponse(fileId);
-  }
-
-  const response = await fetch(requestedImage.thumbnailLink, {
+  const response = await fetch(DRIVE_FILE_MEDIA_ENDPOINT(fileId), {
     headers: await getAuthHeaders(authClient),
   });
 
   if (!response.ok) {
-    throw new SafeGalleryError("Unable to load gallery thumbnail.", response.status, {
-      reason: "drive-thumbnail-failed",
+    throw new SafeGalleryError("Unable to load gallery image for thumbnail.", response.status, {
+      reason: "drive-thumbnail-source-failed",
       fileId,
       status: response.status,
       statusText: response.statusText,
     });
   }
 
-  const body = Buffer.from(await response.arrayBuffer());
+  const sourceBody = Buffer.from(await response.arrayBuffer());
+  let body;
+
+  try {
+    body = await sharp(sourceBody, { animated: false })
+      .rotate()
+      .resize({
+        width: GALLERY_THUMBNAIL_MAX_DIMENSION,
+        height: GALLERY_THUMBNAIL_MAX_DIMENSION,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .jpeg({
+        quality: GALLERY_THUMBNAIL_JPEG_QUALITY,
+        mozjpeg: true,
+      })
+      .toBuffer();
+  } catch (error) {
+    throw new SafeGalleryError("Unable to optimize gallery thumbnail.", 500, {
+      reason: "thumbnail-optimization-failed",
+      fileId,
+      message: error?.message,
+    });
+  }
 
   return {
     body,
-    contentType: response.headers.get("content-type") ?? requestedImage.mimeType,
+    contentType: "image/jpeg",
     contentLength: body.length,
-    source: "google-drive-thumbnail",
+    source: "google-drive-optimized-thumbnail",
   };
 }
 
