@@ -20,7 +20,8 @@ sequences (`\n`). The API normalizes those before authenticating.
 
 Local development can run without credentials. When the required variables are
 missing outside production, `/api/gallery` returns a small mock response and
-`/api/gallery/image?id=mock-drive-image-1` returns a placeholder image. Set
+`/api/gallery/image?id=mock-drive-image-1` and
+`/api/gallery/thumbnail?id=mock-drive-image-1` return placeholder images. Set
 `GOOGLE_DRIVE_GALLERY_USE_MOCK=false` to disable this behavior locally.
 
 ## Google Drive Setup
@@ -52,7 +53,7 @@ the folder ID is `abc123FolderId`.
       "id": "drive-file-id",
       "filename": "project.jpg",
       "imageUrl": "/api/gallery/image?id=drive-file-id",
-      "thumbnailUrl": "/api/gallery/image?id=drive-file-id",
+      "thumbnailUrl": "/api/gallery/thumbnail?id=drive-file-id",
       "width": 1200,
       "height": 800,
       "createdAt": "2026-08-17T12:00:00.000Z",
@@ -61,8 +62,7 @@ the folder ID is `abc123FolderId`.
   ],
   "meta": {
     "count": 1,
-    "source": "google-drive",
-    "cacheTtlSeconds": 10800
+    "source": "google-drive"
   }
 }
 ```
@@ -72,17 +72,24 @@ Drive client. The endpoint validates the file ID and only serves files returned
 from the configured gallery folder, so it cannot be used as a generic Drive
 proxy.
 
+`GET /api/gallery/thumbnail?id=FILE_ID` streams the smaller Google Drive
+thumbnail for the same validated folder image. The React gallery grid uses this
+URL so visitors do not need to download full-resolution originals just to view
+the thumbnail grid.
+
 ## Caching
 
-Gallery metadata uses an in-memory function cache for roughly 3 hours and sends
-Vercel-compatible CDN cache headers:
+Gallery metadata is intentionally not cached. Every `GET /api/gallery` request
+queries Google Drive for the current folder contents and sends no-store headers:
 
 ```text
-Cache-Control: public, max-age=0, s-maxage=10800, stale-while-revalidate=86400
+Cache-Control: no-store, max-age=0, s-maxage=0, must-revalidate
+CDN-Cache-Control: no-store
+Vercel-CDN-Cache-Control: no-store
 ```
 
-Image responses can be cached by browsers for 1 hour and by Vercel/CDN for 24
-hours:
+Image and thumbnail responses can be cached by browsers for 1 hour and by
+Vercel/CDN for 24 hours:
 
 ```text
 Cache-Control: public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800

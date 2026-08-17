@@ -18,12 +18,6 @@ const SUPPORTED_IMAGE_MIME_TYPES = new Set([
 ]);
 
 const FILE_ID_PATTERN = /^[A-Za-z0-9_-]{10,}$/;
-const METADATA_CACHE_TTL_MS = 3 * 60 * 60 * 1000;
-
-let metadataCache = {
-  expiresAt: 0,
-  images: null,
-};
 
 class SafeGalleryError extends Error {
   constructor(message, statusCode = 500, logContext = {}) {
@@ -109,12 +103,15 @@ function normalizeDriveFile(file) {
   const width = Number(file.imageMediaMetadata?.width);
   const height = Number(file.imageMediaMetadata?.height);
   const imageUrl = `/api/gallery/image?id=${encodeURIComponent(file.id)}`;
+  const thumbnailUrl = file.thumbnailLink
+    ? `/api/gallery/thumbnail?id=${encodeURIComponent(file.id)}`
+    : imageUrl;
 
   return {
     id: file.id,
     filename: file.name,
     imageUrl,
-    thumbnailUrl: imageUrl,
+    thumbnailUrl,
     width: Number.isFinite(width) ? width : undefined,
     height: Number.isFinite(height) ? height : undefined,
     createdAt: file.createdTime,
@@ -122,7 +119,7 @@ function normalizeDriveFile(file) {
   };
 }
 
-async function listDriveImages(authClient, folderId) {
+async function listDriveImageFiles(authClient, folderId) {
   const params = new URLSearchParams({
     q: driveQueryForFolder(folderId),
     fields:
@@ -146,9 +143,9 @@ async function listDriveImages(authClient, folderId) {
   }
 
   const data = await response.json();
-  return (data.files ?? [])
-    .filter((file) => file.id && file.name && SUPPORTED_IMAGE_MIME_TYPES.has(file.mimeType))
-    .map(normalizeDriveFile);
+  return (data.files ?? []).filter(
+    (file) => file.id && file.name && SUPPORTED_IMAGE_MIME_TYPES.has(file.mimeType),
+  );
 }
 
 function mockGalleryImages() {
@@ -159,7 +156,7 @@ function mockGalleryImages() {
       id: "mock-drive-image-1",
       filename: "mock-gallery-image.jpg",
       imageUrl: "/api/gallery/image?id=mock-drive-image-1",
-      thumbnailUrl: "/api/gallery/image?id=mock-drive-image-1",
+      thumbnailUrl: "/api/gallery/thumbnail?id=mock-drive-image-1",
       width: 1200,
       height: 800,
       createdAt: now,
@@ -168,46 +165,28 @@ function mockGalleryImages() {
   ];
 }
 
-export async function getGalleryImages({ forceRefresh = false } = {}) {
-  const now = Date.now();
-
-  if (!forceRefresh && metadataCache.images && metadataCache.expiresAt > now) {
-    return {
-      images: metadataCache.images,
-      source: "cache",
-      cacheTtlSeconds: Math.floor((metadataCache.expiresAt - now) / 1000),
-    };
-  }
-
+export async function getGalleryImages() {
   const credentials = getGoogleCredentials();
 
   if (!credentials) {
-    const images = mockGalleryImages();
-    metadataCache = {
-      images,
-      expiresAt: now + 5 * 60 * 1000,
-    };
-
     return {
-      images,
+      images: mockGalleryImages(),
       source: "mock",
-      cacheTtlSeconds: 5 * 60,
     };
   }
 
   const authClient = createAuthClient(credentials);
-  const images = await listDriveImages(authClient, credentials.folderId);
-
-  metadataCache = {
-    images,
-    expiresAt: now + METADATA_CACHE_TTL_MS,
-  };
+  const files = await listDriveImageFiles(authClient, credentials.folderId);
 
   return {
-    images,
+    images: files.map(normalizeDriveFile),
     source: "google-drive",
-    cacheTtlSeconds: METADATA_CACHE_TTL_MS / 1000,
   };
+}
+
+async function getGalleryFileById(authClient, folderId, fileId) {
+  const files = await listDriveImageFiles(authClient, folderId);
+  return files.find((file) => file.id === fileId);
 }
 
 export async function getDriveImageResponse(fileId) {
@@ -237,8 +216,8 @@ export async function getDriveImageResponse(fileId) {
     });
   }
 
-  const { images } = await getGalleryImages();
-  const requestedImage = images.find((image) => image.id === fileId);
+  const authClient = createAuthClient(credentials);
+  const requestedImage = await getGalleryFileById(authClient, credentials.folderId, fileId);
 
   if (!requestedImage) {
     throw new SafeGalleryError("Image was not found in the configured gallery folder.", 404, {
@@ -247,7 +226,6 @@ export async function getDriveImageResponse(fileId) {
     });
   }
 
-  const authClient = createAuthClient(credentials);
   const response = await fetch(DRIVE_FILE_MEDIA_ENDPOINT(fileId), {
     headers: await getAuthHeaders(authClient),
   });
@@ -268,6 +246,70 @@ export async function getDriveImageResponse(fileId) {
     contentType: response.headers.get("content-type") ?? "application/octet-stream",
     contentLength: body.length,
     source: "google-drive",
+  };
+}
+
+export async function getDriveThumbnailResponse(fileId) {
+  if (!fileId || !FILE_ID_PATTERN.test(fileId)) {
+    throw new SafeGalleryError("Missing or invalid image id.", 400, {
+      reason: "invalid-file-id",
+    });
+  }
+
+  if (fileId.startsWith("mock-drive-image-") && canUseMockGallery()) {
+    return {
+      body: Buffer.from(
+        "R0lGODlhAQABAPAAAP///wAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==",
+        "base64",
+      ),
+      contentType: "image/gif",
+      contentLength: 43,
+      source: "mock",
+    };
+  }
+
+  const credentials = getGoogleCredentials();
+
+  if (!credentials) {
+    throw new SafeGalleryError("Gallery service is not configured.", 500, {
+      reason: "missing-env",
+    });
+  }
+
+  const authClient = createAuthClient(credentials);
+  const requestedImage = await getGalleryFileById(authClient, credentials.folderId, fileId);
+
+  if (!requestedImage) {
+    throw new SafeGalleryError("Image was not found in the configured gallery folder.", 404, {
+      reason: "file-not-in-gallery-folder",
+      fileId,
+    });
+  }
+
+  if (!requestedImage.thumbnailLink) {
+    return getDriveImageResponse(fileId);
+  }
+
+  const response = await fetch(requestedImage.thumbnailLink, {
+    headers: await getAuthHeaders(authClient),
+  });
+
+  if (!response.ok) {
+    throw new SafeGalleryError("Unable to load gallery thumbnail.", response.status, {
+      reason: "drive-thumbnail-failed",
+      fileId,
+      status: response.status,
+      statusText: response.statusText,
+    });
+  }
+
+  const body = Buffer.from(await response.arrayBuffer());
+
+  return {
+    body,
+    contentType: response.headers.get("content-type") ?? requestedImage.mimeType,
+    contentLength: body.length,
+    source: "google-drive-thumbnail",
   };
 }
 

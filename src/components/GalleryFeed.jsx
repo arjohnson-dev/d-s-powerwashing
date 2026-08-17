@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import PrimaryButtonLink from "./PrimaryButtonLink";
 
 const GALLERY_ENDPOINT = "/api/gallery";
+const SWIPE_DISTANCE_THRESHOLD = 50;
+const SWIPE_AXIS_RATIO = 1.4;
 
 function getImageAlt(filename) {
   const fallback = "Completed power washing project";
@@ -39,8 +42,9 @@ function GallerySkeleton() {
   );
 }
 
-function GalleryLightbox({ image, onClose }) {
+function GalleryLightbox({ image, hasMultipleImages, onClose, onNext, onPrevious }) {
   const closeButtonRef = useRef(null);
+  const touchStartRef = useRef(null);
 
   useEffect(() => {
     closeButtonRef.current?.focus();
@@ -48,6 +52,18 @@ function GalleryLightbox({ image, onClose }) {
     const handleKeyDown = (event) => {
       if (event.key === "Escape") {
         onClose();
+        return;
+      }
+
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        onPrevious();
+        return;
+      }
+
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        onNext();
       }
     };
 
@@ -58,7 +74,46 @@ function GalleryLightbox({ image, onClose }) {
       document.removeEventListener("keydown", handleKeyDown);
       document.body.classList.remove("is-lightbox-open");
     };
-  }, [onClose]);
+  }, [onClose, onNext, onPrevious]);
+
+  const handleTouchStart = (event) => {
+    if (event.touches.length !== 1 || event.target.closest("button")) {
+      touchStartRef.current = null;
+      return;
+    }
+
+    const touch = event.touches[0];
+    touchStartRef.current = {
+      x: touch.clientX,
+      y: touch.clientY,
+    };
+  };
+
+  const handleTouchEnd = (event) => {
+    const touchStart = touchStartRef.current;
+    touchStartRef.current = null;
+
+    if (!touchStart || event.changedTouches.length !== 1 || event.target.closest("button")) {
+      return;
+    }
+
+    const touch = event.changedTouches[0];
+    const deltaX = touch.clientX - touchStart.x;
+    const deltaY = touch.clientY - touchStart.y;
+    const isIntentionalHorizontalSwipe =
+      Math.abs(deltaX) >= SWIPE_DISTANCE_THRESHOLD &&
+      Math.abs(deltaX) > Math.abs(deltaY) * SWIPE_AXIS_RATIO;
+
+    if (!isIntentionalHorizontalSwipe) {
+      return;
+    }
+
+    if (deltaX < 0) {
+      onNext();
+    } else {
+      onPrevious();
+    }
+  };
 
   return (
     <div
@@ -83,11 +138,35 @@ function GalleryLightbox({ image, onClose }) {
         >
           Close
         </button>
-        <img
-          alt={getImageAlt(image.filename)}
-          className="gallery-lightbox-image"
-          src={image.imageUrl}
-        />
+        <div className="gallery-lightbox-stage">
+          {hasMultipleImages ? (
+            <button
+              aria-label="Previous project image"
+              className="gallery-lightbox-nav gallery-lightbox-nav-previous"
+              onClick={onPrevious}
+              type="button"
+            >
+              <FiChevronLeft aria-hidden="true" focusable="false" />
+            </button>
+          ) : null}
+          <img
+            alt={getImageAlt(image.filename)}
+            className="gallery-lightbox-image"
+            onTouchEnd={handleTouchEnd}
+            onTouchStart={handleTouchStart}
+            src={image.imageUrl}
+          />
+          {hasMultipleImages ? (
+            <button
+              aria-label="Next project image"
+              className="gallery-lightbox-nav gallery-lightbox-nav-next"
+              onClick={onNext}
+              type="button"
+            >
+              <FiChevronRight aria-hidden="true" focusable="false" />
+            </button>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -96,8 +175,10 @@ function GalleryLightbox({ image, onClose }) {
 function GalleryFeed({ ctaLabel, ctaTo = "/contact" }) {
   const [images, setImages] = useState([]);
   const [status, setStatus] = useState("loading");
-  const [activeImage, setActiveImage] = useState(null);
+  const [activeImageIndex, setActiveImageIndex] = useState(null);
   const lastFocusedElementRef = useRef(null);
+  const activeImage = activeImageIndex === null ? null : images[activeImageIndex];
+  const hasMultipleImages = images.length > 1;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -139,13 +220,66 @@ function GalleryFeed({ ctaLabel, ctaTo = "/contact" }) {
     };
   }, []);
 
-  const openLightbox = (image) => {
+  useEffect(() => {
+    if (activeImageIndex !== null && !images[activeImageIndex]) {
+      setActiveImageIndex(null);
+    }
+  }, [activeImageIndex, images]);
+
+  const getWrappedImageIndex = useCallback(
+    (index) => {
+      if (images.length === 0) {
+        return null;
+      }
+
+      return (index + images.length) % images.length;
+    },
+    [images.length],
+  );
+
+  const showPreviousImage = useCallback(() => {
+    setActiveImageIndex((currentIndex) => {
+      if (currentIndex === null) {
+        return currentIndex;
+      }
+
+      return getWrappedImageIndex(currentIndex - 1);
+    });
+  }, [getWrappedImageIndex]);
+
+  const showNextImage = useCallback(() => {
+    setActiveImageIndex((currentIndex) => {
+      if (currentIndex === null) {
+        return currentIndex;
+      }
+
+      return getWrappedImageIndex(currentIndex + 1);
+    });
+  }, [getWrappedImageIndex]);
+
+  useEffect(() => {
+    if (activeImageIndex === null || images.length < 2) {
+      return;
+    }
+
+    const previousImage = images[getWrappedImageIndex(activeImageIndex - 1)];
+    const nextImage = images[getWrappedImageIndex(activeImageIndex + 1)];
+
+    [previousImage, nextImage].forEach((galleryImage) => {
+      if (galleryImage?.imageUrl) {
+        const preloadedImage = new Image();
+        preloadedImage.src = galleryImage.imageUrl;
+      }
+    });
+  }, [activeImageIndex, getWrappedImageIndex, images]);
+
+  const openLightbox = (index) => {
     lastFocusedElementRef.current = document.activeElement;
-    setActiveImage(image);
+    setActiveImageIndex(index);
   };
 
   const closeLightbox = () => {
-    setActiveImage(null);
+    setActiveImageIndex(null);
     lastFocusedElementRef.current?.focus?.();
   };
 
@@ -168,7 +302,7 @@ function GalleryFeed({ ctaLabel, ctaTo = "/contact" }) {
 
         {status === "ready" && images.length > 0 ? (
           <div className="gallery-grid">
-            {images.map((image) => {
+            {images.map((image, index) => {
               const width = Number(image.width);
               const height = Number(image.height);
               const hasDimensions =
@@ -179,7 +313,7 @@ function GalleryFeed({ ctaLabel, ctaTo = "/contact" }) {
                   aria-label={`Open ${getImageAlt(image.filename)}`}
                   className="gallery-item"
                   key={image.id}
-                  onClick={() => openLightbox(image)}
+                  onClick={() => openLightbox(index)}
                   style={hasDimensions ? { aspectRatio: `${width} / ${height}` } : undefined}
                   type="button"
                 >
@@ -204,7 +338,15 @@ function GalleryFeed({ ctaLabel, ctaTo = "/contact" }) {
         </div>
       ) : null}
 
-      {activeImage ? <GalleryLightbox image={activeImage} onClose={closeLightbox} /> : null}
+      {activeImage ? (
+        <GalleryLightbox
+          hasMultipleImages={hasMultipleImages}
+          image={activeImage}
+          onClose={closeLightbox}
+          onNext={showNextImage}
+          onPrevious={showPreviousImage}
+        />
+      ) : null}
     </section>
   );
 }
